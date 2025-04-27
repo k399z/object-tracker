@@ -44,9 +44,7 @@ Rect detectChessboardBBox(Mat& frame, int minArea = 5000) {
     // Find contours and pick the largest
     vector<vector<Point>> contours;
     findContours(thresh, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    if (contours.empty()) {
-        return Rect();
-    }
+    if (contours.empty()) return Rect(); 
 
     double maxArea = 0.0;
     int bestIdx = -1;
@@ -57,7 +55,7 @@ Rect detectChessboardBBox(Mat& frame, int minArea = 5000) {
             bestIdx = i;
         }
     }
-    if (maxArea < minArea) {
+    if (maxArea < minArea || bestIdx == -1) {
         return Rect();
     }
 
