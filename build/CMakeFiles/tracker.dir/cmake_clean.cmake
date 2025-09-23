@@ -1,6 +1,5 @@
 file(REMOVE_RECURSE
   "CMakeFiles/tracker.dir/tracker.cc.o"
-  "CMakeFiles/tracker.dir/tracker.cc.o.d"
   "tracker"
   "tracker.pdb"
 )

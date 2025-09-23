@@ -1,7 +1,7 @@
-/home/pi/object_tracker/build/CMakeFiles/tracker.dir
-/home/pi/object_tracker/build/CMakeFiles/edit_cache.dir
-/home/pi/object_tracker/build/CMakeFiles/rebuild_cache.dir
-/home/pi/object_tracker/build/CMakeFiles/list_install_components.dir
-/home/pi/object_tracker/build/CMakeFiles/install.dir
-/home/pi/object_tracker/build/CMakeFiles/install/local.dir
-/home/pi/object_tracker/build/CMakeFiles/install/strip.dir
+/home/ubuntu/object-tracker/build/CMakeFiles/install/strip.dir
+/home/ubuntu/object-tracker/build/CMakeFiles/install/local.dir
+/home/ubuntu/object-tracker/build/CMakeFiles/install.dir
+/home/ubuntu/object-tracker/build/CMakeFiles/list_install_components.dir
+/home/ubuntu/object-tracker/build/CMakeFiles/rebuild_cache.dir
+/home/ubuntu/object-tracker/build/CMakeFiles/edit_cache.dir
+/home/ubuntu/object-tracker/build/CMakeFiles/tracker.dir
