@@ -14,7 +14,7 @@ static const Size PATTERN(11, 8);
 static const int  CB_FLAGS = CALIB_CB_EXHAUSTIVE | CALIB_CB_ACCURACY;
 
 // Pre-allocate Mats and vectors
-static Mat gray_full, gray_roi, proc, small;
+static Mat gray_full, gray_roi, small;
 static vector<Point2f> corners;
 
 // Helper: verify chessboard grid inside ROI using common inner-corner sizes
@@ -113,7 +113,6 @@ int main(){
 
                 // downscale aggressively
                 resize(gray_full, small, PROC_SIZE, 0,0, INTER_AREA);
-                cvtColor(frame, proc, COLOR_BGR2GRAY); // if you need color proc, skip
 
                 // detect on small
                 Rect bbox_small = detectChessboardBBox(small);
@@ -126,7 +125,7 @@ int main(){
                 // Draw bounding box if valid (on downscaled frame)
                 string status;
                 if (bbox.width > 0 && bbox.height > 0) {
-                    rectangle(proc, bbox, Scalar(0, 255, 0), 2);
+                    rectangle(frame, bbox, Scalar(0, 255, 0), 2);
                     status = "Chessboard Grid Verified";
                     cout << "BoundingBox = (" << bbox.x << ", " << bbox.y << "), w="
                          << bbox.width << ", h=" << bbox.height << endl;
@@ -135,15 +134,15 @@ int main(){
                 }
 
                 // Draw status on downscaled frame
-                putText(proc, status, Point(30, 30), FONT_HERSHEY_SIMPLEX, 0.8,
+                putText(frame, status, Point(30, 30), FONT_HERSHEY_SIMPLEX, 0.8,
                        Scalar(0, 255, 0), 2);
 
                 // Draw FPS (previous frame's throughput)
-                putText(proc, cv::format("FPS: %.1f", fps), Point(30, 60), FONT_HERSHEY_SIMPLEX, 0.8,
+                putText(frame, cv::format("FPS: %.1f", fps), Point(30, 60), FONT_HERSHEY_SIMPLEX, 0.8,
                         Scalar(0, 255, 0), 2);
 
                 // Show the downscaled frame
-                imshow(windowName, proc);
+                imshow(windowName, frame);
 
                 // Exit on ESC or 'q'
                 char key = (char)waitKey(30);
