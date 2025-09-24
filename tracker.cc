@@ -7,6 +7,16 @@
 using namespace cv;
 using namespace std;
 
+// 1) At top add constants and pre-allocate temps
+static const Size PROC_SIZE(320, 240);
+static const Size PATTERN(11, 8);
+// Drop CALIB_CB_FAST_CHECK – SB version doesn’t support it
+static const int  CB_FLAGS = CALIB_CB_EXHAUSTIVE | CALIB_CB_ACCURACY;
+
+// Pre-allocate Mats and vectors
+static Mat gray_full, gray_roi, proc, small;
+static vector<Point2f> corners;
+
 // Helper: verify chessboard grid inside ROI using common inner-corner sizes
 static bool verifyChessboardInROI(const Mat& gray, const Rect& bbox, Rect& chessRect, vector<Point2f>& chessCorners) {
     if (bbox.width <= 0 || bbox.height <= 0) return false;
@@ -21,40 +31,37 @@ static bool verifyChessboardInROI(const Mat& gray, const Rect& bbox, Rect& chess
     roi.width  = std::min(gray.cols  - roi.x, roi.width  + 2 * dx);
     roi.height = std::min(gray.rows - roi.y, roi.height + 2 * dy);
 
-    Mat grayRoi = gray(roi);
-    if (grayRoi.empty()) return false;
-    if (grayRoi.channels() != 1) cvtColor(grayRoi, grayRoi, COLOR_BGR2GRAY);
+    gray_roi = gray(roi);                        // reuse gray_roi
+    // no equalizeHist(gray_roi, gray_roi);
 
-    // Improve contrast for detection
-    equalizeHist(grayRoi, grayRoi);
-
-    // Only check for an 11×8 inner-corner chessboard now
-    Size pattern(11, 8);
-    vector<Point2f> corners;
+    // FAST_CHECK will abort quickly on bad regions
     bool found = findChessboardCornersSB(
-        grayRoi, pattern, corners, CALIB_CB_EXHAUSTIVE | CALIB_CB_ACCURACY
+        gray_roi, PATTERN, corners, CB_FLAGS
     );
-    if (!found || corners.size() != pattern.width * pattern.height)
+    if (!found || corners.size() != PATTERN.area())
         return false;
 
-    cornerSubPix(
-        grayRoi, corners, Size(11,11), Size(-1,-1),
-        TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 30, 0.1)
-    );
+    // optionally skip subpix for speed
+    // cornerSubPix(gray_roi, corners, Size(11,11), Size(-1,-1),
+    //              TermCriteria(TermCriteria::EPS+TermCriteria::COUNT,30,0.1));
 
     Rect localRect = boundingRect(corners);
-    chessRect = Rect(localRect.tl() + roi.tl(), localRect.br() + roi.tl());
+    chessRect = Rect(localRect.tl()+roi.tl(), localRect.br()+roi.tl());
     chessCorners = corners;
-    for (auto& p : chessCorners)
-        p += Point2f((float)roi.x, (float)roi.y);
-
+    for (auto& p : chessCorners) p += Point2f((float)roi.x,(float)roi.y);
     return true;
 }
 
 // Function to detect chessboard bounding box
 Rect detectChessboardBBox(Mat& frame, int minArea = 5000) {
     Mat gray;
-    cvtColor(frame, gray, COLOR_BGR2GRAY);
+    // Replace unconditional cvtColor with channel check:
+    if (frame.channels() == 3) {
+        cvtColor(frame, gray, COLOR_BGR2GRAY);
+    } else {
+        // already gray
+        gray = frame;
+    }
     GaussianBlur(gray, gray, Size(5, 5), 0);
 
     // Try robust full-frame chessboard detection (most reliable).
@@ -88,6 +95,7 @@ int main(){
         int64 lastTick = cv::getTickCount();
         double fps = 0.0;
 
+        // Pre-allocate images once
         Mat frame;
 
         while(true){
@@ -100,12 +108,20 @@ int main(){
                 cap >> frame;
                 if(frame.empty()) break;
 
-                // Resize to 640x480 for processing
-                Mat proc;
-                resize(frame, proc, Size(640, 480), 0, 0, INTER_AREA);
+                // single BGR→GRAY conversion
+                cvtColor(frame, gray_full, COLOR_BGR2GRAY);
 
-                // Detect chessboard on the (possibly) downscaled frame
-                Rect bbox = detectChessboardBBox(proc);
+                // downscale aggressively
+                resize(gray_full, small, PROC_SIZE, 0,0, INTER_AREA);
+                cvtColor(frame, proc, COLOR_BGR2GRAY); // if you need color proc, skip
+
+                // detect on small
+                Rect bbox_small = detectChessboardBBox(small);
+                // scale bbox back to display size
+                Rect bbox(
+                    bbox_small.x*2, bbox_small.y*2,
+                    bbox_small.width*2, bbox_small.height*2
+                );
 
                 // Draw bounding box if valid (on downscaled frame)
                 string status;
