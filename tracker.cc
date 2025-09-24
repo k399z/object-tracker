@@ -78,9 +78,9 @@ int main(){
                 cout << "Error opening video stream or file" << endl;
                 return -1;
         }
-        // Hint camera to capture at 640x480
-        cap.set(CAP_PROP_FRAME_WIDTH, 640);
-        cap.set(CAP_PROP_FRAME_HEIGHT, 480);
+        // Hint camera to capture at 320x240
+        cap.set(CAP_PROP_FRAME_WIDTH, 320);
+        cap.set(CAP_PROP_FRAME_HEIGHT, 240);
         string windowName = "object tracking";
         namedWindow(windowName, WINDOW_AUTOSIZE);
 
@@ -100,9 +100,9 @@ int main(){
                 cap >> frame;
                 if(frame.empty()) break;
 
-                // Resize to 640x480 for processing
+                // Resize to 320x240 for processing
                 Mat proc;
-                resize(frame, proc, Size(640, 480), 0, 0, INTER_AREA);
+                resize(frame, proc, Size(320, 240), 0, 0, INTER_AREA);
 
                 // Detect chessboard on the (possibly) downscaled frame
                 Rect bbox = detectChessboardBBox(proc);
