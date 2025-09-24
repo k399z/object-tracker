@@ -10,6 +10,8 @@ using namespace std;
 // 1) At top add constants and pre-allocate temps
 static const Size PROC_SIZE(320, 240);
 static const Size PATTERN(11, 8);
+// New: explicit blur kernel constant
+static const cv::Size BLUR_SIZE(5,5);
 
 // Previous code used CALIB_CB_EXHAUSTIVE | CALIB_CB_ACCURACY every frame (slow).
 // Split into fast (no extra flags) and accurate (refinement only for small ROI).
@@ -54,9 +56,9 @@ static bool verifyChessboardInROI(const Mat& gray, const Rect& bbox, Rect& chess
     // Use local gray_roi instead of static
     Mat gray_roi = gray(roi);
     int flags = accurate ? CB_FLAGS_ACCURATE : CB_FLAGS_FAST;
-    // no equalizeHist(gray_roi, gray_roi);
 
-    // FAST_CHECK will abort quickly on bad regions
+    // Clear reused container to avoid stale points
+    corners.clear();
     bool found = findChessboardCornersSB(gray_roi, PATTERN, corners, flags);
     if (!found || corners.size() != PATTERN.area())
         return false;
@@ -136,8 +138,8 @@ int main(){
                 // downscale aggressively
                 resize(gray_full, small, PROC_SIZE, 0,0, INTER_AREA);
 
-                // Apply GaussianBlur once here
-                GaussianBlur(small, small, Size(5, 5), 0);
+                // Apply GaussianBlur once here (removed magic number)
+                GaussianBlur(small, small, BLUR_SIZE, 0);
 
                 frameCounter++;
 
@@ -193,6 +195,7 @@ int main(){
                         if (!hasSmooth) {
                             smooth_bbox = det;
                             hasSmooth = true;
+                            adaptiveAlpha = SMOOTH_ALPHA; // reset alpha on (re)acquire
                         } else {
                             // Adaptive alpha based on normalized center shift
                             Point2f cOld(smooth_bbox.x + smooth_bbox.width *0.5f,
@@ -220,6 +223,7 @@ int main(){
                     if (missGrace > ROI_MISS_RESET + GRACE_FRAMES) {
                         last_bbox_small = Rect();
                         hasSmooth = false;
+                        adaptiveAlpha = SMOOTH_ALPHA; // reset after full loss
                     }
                 }
 
