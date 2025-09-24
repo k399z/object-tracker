@@ -14,7 +14,7 @@ static const Size PATTERN(11, 8);
 static const int  CB_FLAGS = CALIB_CB_EXHAUSTIVE | CALIB_CB_ACCURACY;
 
 // Pre-allocate Mats and vectors
-static Mat gray_full, gray_roi, small;
+static Mat gray_full, small;
 static vector<Point2f> corners;
 
 // Helper: verify chessboard grid inside ROI using common inner-corner sizes
@@ -31,7 +31,8 @@ static bool verifyChessboardInROI(const Mat& gray, const Rect& bbox, Rect& chess
     roi.width  = std::min(gray.cols  - roi.x, roi.width  + 2 * dx);
     roi.height = std::min(gray.rows - roi.y, roi.height + 2 * dy);
 
-    gray_roi = gray(roi);                        // reuse gray_roi
+    // Use local gray_roi instead of static
+    Mat gray_roi = gray(roi);
     // no equalizeHist(gray_roi, gray_roi);
 
     // FAST_CHECK will abort quickly on bad regions
@@ -53,30 +54,16 @@ static bool verifyChessboardInROI(const Mat& gray, const Rect& bbox, Rect& chess
 }
 
 // Function to detect chessboard bounding box
-Rect detectChessboardBBox(Mat& frame, int minArea = 5000) {
-    Mat gray;
-    // Replace unconditional cvtColor with channel check:
-    if (frame.channels() == 3) {
-        cvtColor(frame, gray, COLOR_BGR2GRAY);
-    } else {
-        // already gray
-        gray = frame;
-    }
-    GaussianBlur(gray, gray, Size(5, 5), 0);
-
+// Accept grayscale image directly, avoid redundant conversion
+Rect detectChessboardBBox(const Mat& gray, Mat& frame, int minArea = 5000) {
     // Try robust full-frame chessboard detection (most reliable).
     Rect full(0, 0, gray.cols, gray.rows);
     Rect chessRect;
     vector<Point2f> chessCorners;
-    if (verifyChessboardInROI(gray, full, chessRect, chessCorners)) {
-        for (const auto& p : chessCorners) {
-            circle(frame, p, 3, Scalar(0, 0, 255), FILLED);
-        }
+    if (verifyChessboardInROI(gray, full, chessRect, chessCorners))         
         return chessRect;
-    }
-
-    // No fallback: return empty if not found.
-    return Rect();
+    else
+        return Rect();
 }
 
 int main(){
@@ -98,6 +85,10 @@ int main(){
         // Pre-allocate images once
         Mat frame;
 
+        // Calculate scale factor based on PROC_SIZE and capture size
+        double scale_x = PROC_SIZE.width / 640.0;
+        double scale_y = PROC_SIZE.height / 480.0;
+
         while(true){
                 // Update FPS from previous iteration
                 int64 nowTick = cv::getTickCount();
@@ -114,12 +105,18 @@ int main(){
                 // downscale aggressively
                 resize(gray_full, small, PROC_SIZE, 0,0, INTER_AREA);
 
-                // detect on small
-                Rect bbox_small = detectChessboardBBox(small);
-                // scale bbox back to display size
+                // Apply GaussianBlur once here
+                GaussianBlur(small, small, Size(5, 5), 0);
+
+                // detect on small (pass gray and frame separately)
+                Rect bbox_small = detectChessboardBBox(small, frame);
+
+                // scale bbox back to display size using dynamic scale
+                double fx = (double)frame.cols / small.cols;
+                double fy = (double)frame.rows / small.rows;
                 Rect bbox(
-                    bbox_small.x*2, bbox_small.y*2,
-                    bbox_small.width*2, bbox_small.height*2
+                    cvRound(bbox_small.x * fx), cvRound(bbox_small.y * fy),
+                    cvRound(bbox_small.width * fx), cvRound(bbox_small.height * fy)
                 );
 
                 // Draw bounding box if valid (on downscaled frame)
