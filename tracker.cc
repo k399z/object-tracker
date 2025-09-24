@@ -28,119 +28,48 @@ static bool verifyChessboardInROI(const Mat& gray, const Rect& bbox, Rect& chess
     // Improve contrast for detection
     equalizeHist(grayRoi, grayRoi);
 
-    // Common inner-corner patterns (cols, rows)
-    vector<Size> patterns = {
-        Size(9,6), Size(7,7), Size(8,6), Size(8,5), Size(7,5), Size(6,5), Size(5,4), Size(4,3)
-    };
+    // Only check for an 11×8 inner-corner chessboard now
+    Size pattern(11, 8);
+    vector<Point2f> corners;
+    bool found = findChessboardCornersSB(
+        grayRoi, pattern, corners, CALIB_CB_EXHAUSTIVE | CALIB_CB_ACCURACY
+    );
+    if (!found || corners.size() != pattern.width * pattern.height)
+        return false;
 
-    for (const auto& pattern : patterns) {
-        vector<Point2f> corners;
+    cornerSubPix(
+        grayRoi, corners, Size(11,11), Size(-1,-1),
+        TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 30, 0.1)
+    );
 
-        bool found = findChessboardCornersSB(
-            grayRoi, pattern, corners, CALIB_CB_EXHAUSTIVE | CALIB_CB_ACCURACY
-        );
-        if (!found) continue;
+    Rect localRect = boundingRect(corners);
+    chessRect = Rect(localRect.tl() + roi.tl(), localRect.br() + roi.tl());
+    chessCorners = corners;
+    for (auto& p : chessCorners)
+        p += Point2f((float)roi.x, (float)roi.y);
 
-        if (corners.size() != static_cast<size_t>(pattern.width * pattern.height)) continue;
-
-        cornerSubPix(
-            grayRoi, corners, Size(11,11), Size(-1,-1),
-            TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 30, 0.1)
-        );
-
-        Rect localRect = boundingRect(corners);
-        chessRect = Rect(localRect.tl() + roi.tl(), localRect.br() + roi.tl());
-        chessCorners = corners;
-        for (auto& p : chessCorners) p += Point2f((float)roi.x, (float)roi.y);
-        return true;
-    }
-    return false;
+    return true;
 }
 
-// Function to detect chessboard bounding box using Shi-Tomasi corner detection
-// It now also draws the detected corners onto the input frame for debugging.
+// Function to detect chessboard bounding box
 Rect detectChessboardBBox(Mat& frame, int minArea = 5000) {
     Mat gray;
     cvtColor(frame, gray, COLOR_BGR2GRAY);
     GaussianBlur(gray, gray, Size(5, 5), 0);
 
-    // First, try robust full-frame chessboard detection (most reliable).
-    {
-        Rect full(0, 0, gray.cols, gray.rows);
-        Rect chessRect;
-        vector<Point2f> chessCorners;
-        if (verifyChessboardInROI(gray, full, chessRect, chessCorners)) {
-            // Draw verified chessboard corners (distinct color)
-            for (const auto& p : chessCorners) {
-                circle(frame, p, 3, Scalar(0, 0, 255), FILLED);
-            }
-            return chessRect;
-        }
-    }
-
-    // Fallback: Shi–Tomasi corner clustering
-    vector<Point2f> corners;
-    goodFeaturesToTrack(gray, corners, 100, 0.01, 10);
-
-    // --- Debug: Draw detected corners ---
-    RNG rng(12345); // Random number generator for colors
-    for (size_t i = 0; i < corners.size(); i++) {
-        Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255)); // Random color
-        circle(frame, corners[i], 4, color, FILLED); // Draw small filled circles
-    }
-    // --- End Debug ---
-
-    if (corners.empty() || corners.size() < 4) {
-        return Rect();
-    }
-
-    // Create a mask with detected corners
-    Mat thresh = Mat::zeros(gray.size(), CV_8UC1);
-    for (auto &corner : corners) {
-        circle(thresh, Point(cvRound(corner.x), cvRound(corner.y)), 5, Scalar(255), FILLED);
-    }
-
-    // Apply morphological close (scale kernel with image size)
-    int k = std::max(7, (int)(0.02 * std::min(gray.cols, gray.rows)));
-    if ((k % 2) == 0) ++k;
-    Mat kernel = getStructuringElement(MORPH_RECT, Size(k, k));
-    morphologyEx(thresh, thresh, MORPH_CLOSE, kernel);
-
-    // Find contours and pick the largest
-    vector<vector<Point>> contours;
-    findContours(thresh, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    if (contours.empty()) return Rect();
-
-    double maxArea = 0.0;
-    int bestIdx = -1;
-    for (int i = 0; i < (int)contours.size(); i++) {
-        double area = contourArea(contours[i]);
-        if (area > maxArea) {
-            maxArea = area;
-            bestIdx = i;
-        }
-    }
-
-    // Scale min area with image size; keep user-provided floor
-    int adaptiveMinArea = std::max(minArea, (int)(gray.total() * 0.002)); // ~0.2% of image
-    if (maxArea < adaptiveMinArea || bestIdx == -1) {
-        return Rect();
-    }
-
-    // Verify the candidate box contains a chessboard grid
-    Rect candidate = boundingRect(contours[bestIdx]);
+    // Try robust full-frame chessboard detection (most reliable).
+    Rect full(0, 0, gray.cols, gray.rows);
     Rect chessRect;
     vector<Point2f> chessCorners;
-    if (!verifyChessboardInROI(gray, candidate, chessRect, chessCorners)) {
-        return Rect();
+    if (verifyChessboardInROI(gray, full, chessRect, chessCorners)) {
+        for (const auto& p : chessCorners) {
+            circle(frame, p, 3, Scalar(0, 0, 255), FILLED);
+        }
+        return chessRect;
     }
 
-    // Optional: draw verified chessboard corners (distinct color)
-    for (const auto& p : chessCorners) {
-        circle(frame, p, 3, Scalar(0, 0, 255), FILLED);
-    }
-
-    return chessRect;
+    // No fallback: return empty if not found.
+    return Rect();
 }
 
 int main(){
